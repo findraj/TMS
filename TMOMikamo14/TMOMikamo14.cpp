@@ -50,6 +50,45 @@ TMOMikamo14::TMOMikamo14()
 
 TMOMikamo14::~TMOMikamo14() {}
 
+double TMOMikamo14::B(double x, int k, int i, const std::vector<double> &t)
+{
+  if (k == 0)
+  {
+    return (t[i] <= x && x < t[i + 1]) ? 1.0 : 0.0;
+  }
+
+  double c1 = 0.0;
+  if (t[i + k] != t[i])
+  {
+    c1 = (x - t[i]) / (t[i + k] - t[i]) * B(x, k - 1, i, t);
+  }
+
+  double c2 = 0.0;
+  if (t[i + k + 1] != t[i + 1])
+  {
+    c2 = (t[i + k + 1] - x) / (t[i + k + 1] - t[i + 1]) * B(x, k - 1, i + 1, t);
+  }
+
+  return c1 + c2;
+}
+
+double TMOMikamo14::bspline(double x, const std::vector<double> &t, const std::vector<double> &c, int k)
+{
+  int n = t.size() - k - 1;
+  if (n < k + 1 || c.size() < static_cast<size_t>(n))
+  {
+    exit(1);
+  }
+
+  double result = 0.0;
+  for (int i = 0; i < n; ++i)
+  {
+    result += c[i] * B(x, k, i, t);
+  }
+
+  return result;
+}
+
 double **TMOMikamo14::getNewColorData()
 {
   double **newColorData = new double *[nob];

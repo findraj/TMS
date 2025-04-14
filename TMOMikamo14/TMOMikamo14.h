@@ -28,6 +28,26 @@ public:
   virtual ~TMOMikamo14();
 
   /**
+   * @brief Function to compute the B-spline basis function
+   * @param x input value
+   * @param k degree of the spline
+   * @param i index of the knot vector
+   * @param t knot vector
+   * @return double: value of the B-spline basis function
+   */
+  double B(double x, int k, int i, const std::vector<double> &t);
+
+  /**
+   * @brief Function to compute the B-spline basis function
+   * @param x input value
+   * @param t knot vector
+   * @param c control points
+   * @param k degree of the spline
+   * @return double: value of the B-spline basis function
+   */
+  double bspline(double x, const std::vector<double> &t, const std::vector<double> &c, int k);
+
+  /**
    * @brief Function to get new color data based on the number of bins
    * @return double**: new color data
    */
