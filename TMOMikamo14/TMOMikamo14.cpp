@@ -89,6 +89,37 @@ double TMOMikamo14::bspline(double x, const std::vector<double> &t, const std::v
   return result;
 }
 
+std::pair<std::vector<double>, std::vector<double>> TMOMikamo14::generateBSplineParams(const std::vector<double> &x, const std::vector<double> &y, int k)
+{
+  if (x.size() != y.size() || x.empty())
+  {
+    exit(1);
+  }
+
+  int n = x.size();
+  int m = n + k + 1; // number of knots
+
+  // Generate knot vector t
+  std::vector<double> t(m);
+  for (int i = 0; i <= k; ++i)
+  {
+    t[i] = x.front(); // first k+1 knots are the same as the first x value
+  }
+  for (int i = k + 1; i < m - k - 1; ++i)
+  {
+    t[i] = x[i - k - 1]; // middle knots are the x values
+  }
+  for (int i = m - k - 1; i < m; ++i)
+  {
+    t[i] = x.back(); // last k+1 knots are the same as the last x value
+  }
+
+  // Control points vector c is the same as y values
+  std::vector<double> c = y;
+
+  return {t, c};
+}
+
 double **TMOMikamo14::getNewColorData()
 {
   double **newColorData = new double *[nob];
@@ -320,31 +351,104 @@ double TMOMikamo14::luminanceReduction(double Y, double YLogAvg, double Ymax)
 
 int TMOMikamo14::Transform()
 {
-  // adjust number of used bins to change accuracy
-  double **newColorData = getNewColorData();
-  double **newLMSSens = getNewLMSSens();
+  // // adjust number of used bins to change accuracy
+  // double **newColorData = getNewColorData();
+  // double **newLMSSens = getNewLMSSens();
 
-  double *pSourceData = pSrc->GetData();
-  double *pDestinationData = pDst->GetData();
-  double I = getAdaptedRetinalIlluminance();
+  // double *pSourceData = pSrc->GetData();
+  // double *pDestinationData = pDst->GetData();
+  // double I = getAdaptedRetinalIlluminance();
 
-  // get discrimination parameters for given adapted retinal illuminance
-  std::vector<double> params = getDiscriminationParams(I);
+  // // get discrimination parameters for given adapted retinal illuminance
+  // std::vector<double> params = getDiscriminationParams(I);
 
-  // go through the image and apply the tone mapping operator
-  for (int y = 0; y < pSrc->GetHeight(); y++)
+  // // go through the image and apply the tone mapping operator
+  // for (int y = 0; y < pSrc->GetHeight(); y++)
+  // {
+  //   for (int x = 0; x < pSrc->GetWidth(); x++)
+  //   {
+  //     double *pixel = pSrc->GetPixel(x, y);
+  //     std::vector<double> spd = RGBtoSpectrum(&newColorData, *pSourceData++, *pSourceData++, *pSourceData++);
+  //     cv::Mat opponentColor = applyTwoStageModel(&newLMSSens, spd, I, params);
+
+  //     *pDestinationData++ = opponentColor.at<double>(0, 0);
+  //     *pDestinationData++ = opponentColor.at<double>(1, 0);
+  //     *pDestinationData++ = opponentColor.at<double>(2, 0);
+  //   }
+  // }
+
+  int k = 2;
+  std::pair<std::vector<double>, std::vector<double>> params = generateBSplineParams(LMSsensitivitiesIndex, LMSsensitivities[0], k);
+
+  std::cerr << "t: ";
+  for (const auto &val : params.first)
   {
-    for (int x = 0; x < pSrc->GetWidth(); x++)
-    {
-      double *pixel = pSrc->GetPixel(x, y);
-      std::vector<double> spd = RGBtoSpectrum(&newColorData, *pSourceData++, *pSourceData++, *pSourceData++);
-      cv::Mat opponentColor = applyTwoStageModel(&newLMSSens, spd, I, params);
+    std::cerr << val << " ";
+  }
+  std::cerr << std::endl;
+  std::cerr << "c: ";
+  for (const auto &val : params.second)
+  {
+    std::cerr << val << " ";
+  }
+  std::cerr << std::endl;
 
-      *pDestinationData++ = opponentColor.at<double>(0, 0);
-      *pDestinationData++ = opponentColor.at<double>(1, 0);
-      *pDestinationData++ = opponentColor.at<double>(2, 0);
+  std::cerr << "x: [";
+  for (int i = 0; i < 10; i++)
+  {
+    std::cerr << LMSsensitivitiesIndex[i];
+    if (i < 9)
+    {
+      std::cerr << ", ";
     }
   }
+  std::cerr << "]" << std::endl;
+  std::cerr << "y: [";
+  for (int i = 0; i < 10; i++)
+  {
+    std::cerr << LMSsensitivities[0][i];
+    if (i < 9)
+    {
+      std::cerr << ", ";
+    }
+  }
+  std::cerr << "]" << std::endl;
+
+  std::vector<double> xx;
+  std::vector<double> yy;
+
+  for (int i = 0; i < 100; i++)
+  {
+    double x = double(i) / 100.0 * (LMSsensitivitiesIndex.back() - LMSsensitivitiesIndex.front()) + LMSsensitivitiesIndex.front();
+    double y = bspline(x - 50.0, params.first, params.second, k);
+    xx.push_back(x);
+    yy.push_back(y);
+  }
+
+  std::cerr << "xx: [";
+  for (size_t i = 0; i < xx.size(); i++)
+  {
+    std::cerr << xx[i];
+    if (i < xx.size() - 1)
+    {
+      std::cerr << ", ";
+    }
+  }
+  std::cerr << "]" << std::endl;
+
+  std::cerr << "yy: [";
+  for (size_t i = 0; i < yy.size(); i++)
+  {
+    std::cerr << yy[i];
+    if (i < yy.size() - 1)
+    {
+      std::cerr << ", ";
+    }
+  }
+  std::cerr << "]" << std::endl;
+
+  return 1;
+  ///////////////////////////////////////////////////////////////
 
   pDst->Convert(TMO_Yxy);
   pSrc->Convert(TMO_Yxy);
