@@ -77,6 +77,7 @@ double TMOMikamo14::bspline(double x, const std::vector<double> &t, const std::v
   int n = t.size() - k - 1;
   if (n < k + 1 || c.size() < static_cast<size_t>(n))
   {
+    std::cerr << "ERROR: Invalid knot vector or control points size." << std::endl;
     exit(1);
   }
 
@@ -93,6 +94,7 @@ std::pair<std::vector<double>, std::vector<double>> TMOMikamo14::generateBSpline
 {
   if (x.size() != y.size() || x.empty())
   {
+    std::cerr << "ERROR: x and y vectors must have the same size and cannot be empty." << std::endl;
     exit(1);
   }
 
@@ -103,15 +105,15 @@ std::pair<std::vector<double>, std::vector<double>> TMOMikamo14::generateBSpline
   std::vector<double> t(m);
   for (int i = 0; i <= k; ++i)
   {
-    t[i] = x.front(); // first k+1 knots are the same as the first x value
+    t[i] = x.front();
   }
   for (int i = k + 1; i < m - k - 1; ++i)
   {
-    t[i] = x[i - k - 1]; // middle knots are the x values
+    t[i] = x[i - (k - 1)]; // Changed from x[i - k - 1]
   }
   for (int i = m - k - 1; i < m; ++i)
   {
-    t[i] = x.back(); // last k+1 knots are the same as the last x value
+    t[i] = x.back();
   }
 
   // Control points vector c is the same as y values
@@ -377,8 +379,8 @@ int TMOMikamo14::Transform()
   //   }
   // }
 
-  int k = 2;
-  std::pair<std::vector<double>, std::vector<double>> params = generateBSplineParams(LMSsensitivitiesIndex, LMSsensitivities[0], k);
+  int k = 3;
+  std::pair<std::vector<double>, std::vector<double>> params = generateBSplineParams(LMSsensitivitiesIndex, LMSsensitivities[2], k);
 
   std::cerr << "t: ";
   for (const auto &val : params.first)
@@ -406,7 +408,7 @@ int TMOMikamo14::Transform()
   std::cerr << "y: [";
   for (int i = 0; i < 10; i++)
   {
-    std::cerr << LMSsensitivities[0][i];
+    std::cerr << LMSsensitivities[2][i];
     if (i < 9)
     {
       std::cerr << ", ";
@@ -420,7 +422,7 @@ int TMOMikamo14::Transform()
   for (int i = 0; i < 100; i++)
   {
     double x = double(i) / 100.0 * (LMSsensitivitiesIndex.back() - LMSsensitivitiesIndex.front()) + LMSsensitivitiesIndex.front();
-    double y = bspline(x - 50.0, params.first, params.second, k);
+    double y = bspline(x, params.first, params.second, k);
     xx.push_back(x);
     yy.push_back(y);
   }
