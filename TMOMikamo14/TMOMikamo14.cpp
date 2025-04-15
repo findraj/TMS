@@ -122,54 +122,6 @@ std::pair<std::vector<double>, std::vector<double>> TMOMikamo14::generateBSpline
   return {t, c};
 }
 
-double **TMOMikamo14::getNewColorData()
-{
-  double **newColorData = new double *[nob];
-
-  // for each bin create an array
-  for (int i = 0; i < nob; i++)
-  {
-    newColorData[i] = new double[colors];
-    // each array filled by computed data
-    for (int j = 0; j < colors; j++)
-    {
-      // fraction representing position of new bin in the original data
-      double fract = double(i) / double(nob - 1) * double(bins - 1);
-      int index = std::floor(fract);
-      // compute difference to be added to the origanl value compensating the fractional difference in the position of the new bin
-      double diff = color_data[std::min(index + 1, bins - 1)][j] - color_data[index][j];
-
-      newColorData[i][j] = color_data[index][j] + diff * (fract - double(index));
-    }
-  }
-
-  return newColorData;
-}
-
-double **TMOMikamo14::getNewLMSSens()
-{
-  double **newLMSSens = new double *[nob];
-
-  // for each bin create an array
-  for (int i = 0; i < nob; i++)
-  {
-    newLMSSens[i] = new double[3];
-    // each array filled by computed data
-    for (int j = 0; j < 3; j++)
-    {
-      // fraction representing position of new bin in the original data
-      double fract = double(i) / double(nob - 1) * double(bins - 1);
-      int index = std::floor(fract);
-      // compute difference to be added to the origanl value compensating the fractional difference in the position of the new bin
-      double diff = LMSsensitivities[std::min(index + 1, bins - 1)][j] - LMSsensitivities[index][j];
-
-      newLMSSens[i][j] = LMSsensitivities[index][j] + diff * (fract - double(index));
-    }
-  }
-
-  return newLMSSens;
-}
-
 double TMOMikamo14::getAdaptedRetinalIlluminance()
 {
   // if adapted retinal illuminance is set, return it
@@ -230,66 +182,67 @@ std::vector<double> TMOMikamo14::getDiscriminationParams(double I)
   return params;
 }
 
-double TMOMikamo14::lambdaAdjustment(double ***newLMSSens, int i, int step, int cone)
-{
-  if ((i - step < 0) || (i - step >= nob))
-  {
-    return 0.0;
-  }
-  else
-  {
-    return (*newLMSSens)[i - step][cone];
-  }
-}
-
-cv::Mat TMOMikamo14::applyTwoStageModel(double ***newLMSSens, std::vector<double> spd, double I, std::vector<double> params)
+cv::Mat TMOMikamo14::applyTwoStageModel(std::vector<double> spd, double I, std::vector<double> params)
 {
   // initialize opponent color values
   double V = 0.0;
   double Org = 0.0;
   double Oyb = 0.0;
 
-  double newBinWidth = double(upperBound - lowerBound) / double(nob);
+  int k = 3; // degree of the B-spline
+  std::pair<std::vector<double>, std::vector<double>> LSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[0], k);
+  std::pair<std::vector<double>, std::vector<double>> MSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[1], k);
+  std::pair<std::vector<double>, std::vector<double>> SSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[2], k);
 
+  std::pair<std::vector<double>, std::vector<double>> spdBSplineParams = generateBSplineParams(indexes, spd, k);
+
+  double step = 10.0;
+  double gamma = lowerBound;
   // go through the bins to get integrated opponent color values
-  for (int i = 0; i < nob; i++)
+  while (gamma < upperBound)
   {
     // matrix with horizontally moved spectral sensitivities
-    cv::Mat CmClCs = (cv::Mat_<double>(3, 1) << lambdaAdjustment(newLMSSens, i, (int)(params[0] / binWidth), 0), lambdaAdjustment(newLMSSens, i, (int)(params[1] / binWidth), 1), lambdaAdjustment(newLMSSens, i, (int)(params[2] / binWidth), 2));
+    cv::Mat CmClCs = (cv::Mat_<double>(3, 1) << bspline(gamma - params[0], LSensBSplineParams.first, LSensBSplineParams.second, k),
+                      bspline(gamma - params[1], MSensBSplineParams.first, MSensBSplineParams.second, k),
+                      bspline(gamma - params[2], SSensBSplineParams.first, SSensBSplineParams.second, k));
+
     // matrix which adjusts the amplitudes of the cone responses
     cv::Mat M = (cv::Mat_<double>(3, 3) << 0.6, 0.4, 0.0, params[3], params[4], params[5], params[6], params[7], params[8]);
     // get spectral opponent color values
     cv::Mat z = M * CmClCs;
     // add the spectral opponent color values to the integrated opponent color values
-    V += spd[i] * z.at<double>(0, 0) * newBinWidth;
-    Org += spd[i] * z.at<double>(1, 0) * newBinWidth;
-    Oyb += spd[i] * z.at<double>(2, 0) * newBinWidth;
+    V += bspline(gamma, spdBSplineParams.first, spdBSplineParams.second, k) * z.at<double>(0, 0) * step;
+    Org += bspline(gamma, spdBSplineParams.first, spdBSplineParams.second, k) * z.at<double>(1, 0) * step;
+    Oyb += bspline(gamma, spdBSplineParams.first, spdBSplineParams.second, k) * z.at<double>(2, 0) * step;
+
+    gamma += step;
   }
   // create matrix with opponent color values
   cv::Mat opponentColor = (cv::Mat_<double>(3, 1) << V, Org, Oyb);
   // adjust the gap in the viewing conditions
-  std::vector<double> newParams = getDiscriminationParams(150.0);
-  cv::Mat invM = (cv::Mat_<double>(3, 3) << 0.6, 0.4, 0.0, newParams[3], newParams[4], newParams[5], newParams[6], newParams[7], newParams[8]);
+  std::vector<double> adaptParams = getDiscriminationParams(150.0);
+  cv::Mat invM = (cv::Mat_<double>(3, 3) << 0.6, 0.4, 0.0, adaptParams[3], adaptParams[4], adaptParams[5], adaptParams[6], adaptParams[7], adaptParams[8]);
   invM = invM.inv();
   opponentColor = invM * opponentColor;
 
   return opponentColor;
 }
 
-std::vector<double> TMOMikamo14::RGBtoSpectrum(double ***newColorData, double red, double green, double blue)
+std::vector<double> TMOMikamo14::RGBtoSpectrum(double red, double green, double blue)
 {
   std::vector<double> spectrum;
 
-  for (int binIndex = 0; binIndex < nob; binIndex++)
+  for (int i = 0; i < knotCount; i++)
   {
-    // get spectral power distribution for each color in the bin
-    double white_spd = (*newColorData)[binIndex][White];
-    double cyan_spd = (*newColorData)[binIndex][Cyan];
-    double magenta_spd = (*newColorData)[binIndex][Magenta];
-    double yellow_spd = (*newColorData)[binIndex][Yellow];
-    double red_spd = (*newColorData)[binIndex][Red];
-    double green_spd = (*newColorData)[binIndex][Green];
-    double blue_spd = (*newColorData)[binIndex][Blue];
+    // get spectral power distribution for each color from the colorData
+    double white_spd = colorData[0][i];
+    double cyan_spd = colorData[1][i];
+    double magenta_spd = colorData[2][i];
+    double yellow_spd = colorData[3][i];
+    double red_spd = colorData[4][i];
+    double green_spd = colorData[5][i];
+    double blue_spd = colorData[6][i];
+
     double spd = 0.0;
     // algorithm to convert RGB to spectral power distribution
     if (red <= green && red <= blue)
@@ -353,104 +306,23 @@ double TMOMikamo14::luminanceReduction(double Y, double YLogAvg, double Ymax)
 
 int TMOMikamo14::Transform()
 {
-  // // adjust number of used bins to change accuracy
-  // double **newColorData = getNewColorData();
-  // double **newLMSSens = getNewLMSSens();
+  double I = getAdaptedRetinalIlluminance();
+  std::vector<double> params = getDiscriminationParams(I);
 
-  // double *pSourceData = pSrc->GetData();
-  // double *pDestinationData = pDst->GetData();
-  // double I = getAdaptedRetinalIlluminance();
-
-  // // get discrimination parameters for given adapted retinal illuminance
-  // std::vector<double> params = getDiscriminationParams(I);
-
-  // // go through the image and apply the tone mapping operator
-  // for (int y = 0; y < pSrc->GetHeight(); y++)
-  // {
-  //   for (int x = 0; x < pSrc->GetWidth(); x++)
-  //   {
-  //     double *pixel = pSrc->GetPixel(x, y);
-  //     std::vector<double> spd = RGBtoSpectrum(&newColorData, *pSourceData++, *pSourceData++, *pSourceData++);
-  //     cv::Mat opponentColor = applyTwoStageModel(&newLMSSens, spd, I, params);
-
-  //     *pDestinationData++ = opponentColor.at<double>(0, 0);
-  //     *pDestinationData++ = opponentColor.at<double>(1, 0);
-  //     *pDestinationData++ = opponentColor.at<double>(2, 0);
-  //   }
-  // }
-
-  int k = 3;
-  std::pair<std::vector<double>, std::vector<double>> params = generateBSplineParams(LMSsensitivitiesIndex, LMSsensitivities[2], k);
-
-  std::cerr << "t: ";
-  for (const auto &val : params.first)
+  for (int y = 0; y < pSrc->GetHeight(); y++)
   {
-    std::cerr << val << " ";
-  }
-  std::cerr << std::endl;
-  std::cerr << "c: ";
-  for (const auto &val : params.second)
-  {
-    std::cerr << val << " ";
-  }
-  std::cerr << std::endl;
-
-  std::cerr << "x: [";
-  for (int i = 0; i < 10; i++)
-  {
-    std::cerr << LMSsensitivitiesIndex[i];
-    if (i < 9)
+    for (int x = 0; x < pSrc->GetWidth(); x++)
     {
-      std::cerr << ", ";
+      double *srcPixel = pSrc->GetPixel(x, y);
+      std::vector<double> spd = RGBtoSpectrum(srcPixel[0], srcPixel[1], srcPixel[2]);
+      cv::Mat opponentColor = applyTwoStageModel(spd, I, params);
+
+      double *dstPixel = pDst->GetPixel(x, y);
+      dstPixel[0] = opponentColor.at<double>(0, 0);
+      dstPixel[1] = opponentColor.at<double>(1, 0);
+      dstPixel[2] = opponentColor.at<double>(2, 0);
     }
   }
-  std::cerr << "]" << std::endl;
-  std::cerr << "y: [";
-  for (int i = 0; i < 10; i++)
-  {
-    std::cerr << LMSsensitivities[2][i];
-    if (i < 9)
-    {
-      std::cerr << ", ";
-    }
-  }
-  std::cerr << "]" << std::endl;
-
-  std::vector<double> xx;
-  std::vector<double> yy;
-
-  for (int i = 0; i < 100; i++)
-  {
-    double x = double(i) / 100.0 * (LMSsensitivitiesIndex.back() - LMSsensitivitiesIndex.front()) + LMSsensitivitiesIndex.front();
-    double y = bspline(x, params.first, params.second, k);
-    xx.push_back(x);
-    yy.push_back(y);
-  }
-
-  std::cerr << "xx: [";
-  for (size_t i = 0; i < xx.size(); i++)
-  {
-    std::cerr << xx[i];
-    if (i < xx.size() - 1)
-    {
-      std::cerr << ", ";
-    }
-  }
-  std::cerr << "]" << std::endl;
-
-  std::cerr << "yy: [";
-  for (size_t i = 0; i < yy.size(); i++)
-  {
-    std::cerr << yy[i];
-    if (i < yy.size() - 1)
-    {
-      std::cerr << ", ";
-    }
-  }
-  std::cerr << "]" << std::endl;
-
-  return 1;
-  ///////////////////////////////////////////////////////////////
 
   pDst->Convert(TMO_Yxy);
   pSrc->Convert(TMO_Yxy);
