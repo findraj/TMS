@@ -81,10 +81,11 @@ public:
    * @brief Function to apply two-stage model to get opponent color values
    * @param spd spectral power distribution
    * @param I adapted retinal illuminance
-   * @param params discrimination parameters
+   * @param zVector vector of spectral opponent color values
+   * @param invM matrix to adjust the amplitudes of the cone responses
    * @return Mat: 3 opponent color values
    */
-  cv::Mat applyTwoStageModel(std::vector<double> spd, double I, std::vector<double> params);
+  cv::Mat applyTwoStageModel(std::vector<double> spd, double I, std::vector<cv::Mat> zVector, cv::Mat invM, cv::Mat lms2rgb);
 
   /**
    * @brief Function to convert RGB values to spectral power distribution
@@ -129,6 +130,7 @@ public:
   double upperBound = 700.0;
 
   const static int knotCount = 10; // number of knots
+  const static int degree = 3;     // degree of the spline
 
   // 10 knot indexes on range 400nm to 700nm
   std::vector<double> indexes = {400.0, 433.3, 466.7, 500.0, 533.3, 566.7, 600.0, 633.3, 666.7, 700.0};

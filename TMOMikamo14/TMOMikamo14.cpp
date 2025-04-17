@@ -52,18 +52,21 @@ TMOMikamo14::~TMOMikamo14() {}
 
 double TMOMikamo14::B(double x, int k, int i, const std::vector<double> &t)
 {
+  // if k == 0, check if x is within the interval [t[i], t[i+1])
   if (k == 0)
   {
     return (t[i] <= x && x < t[i + 1]) ? 1.0 : 0.0;
   }
 
   double c1 = 0.0;
+  // compute the first term of the B-spline basis function if the denominator is non-zero
   if (t[i + k] != t[i])
   {
     c1 = (x - t[i]) / (t[i + k] - t[i]) * B(x, k - 1, i, t);
   }
 
   double c2 = 0.0;
+  // compute the second term of the B-spline basis function if the denominator is non-zero
   if (t[i + k + 1] != t[i + 1])
   {
     c2 = (t[i + k + 1] - x) / (t[i + k + 1] - t[i + 1]) * B(x, k - 1, i + 1, t);
@@ -74,7 +77,10 @@ double TMOMikamo14::B(double x, int k, int i, const std::vector<double> &t)
 
 double TMOMikamo14::bspline(double x, const std::vector<double> &t, const std::vector<double> &c, int k)
 {
+  // calculate the number of basis functions
   int n = t.size() - k - 1;
+
+  // validate the knot vector and control points size
   if (n < k + 1 || c.size() < static_cast<size_t>(n))
   {
     std::cerr << "ERROR: Invalid knot vector or control points size." << std::endl;
@@ -82,6 +88,8 @@ double TMOMikamo14::bspline(double x, const std::vector<double> &t, const std::v
   }
 
   double result = 0.0;
+
+  // compute the weighted sum of basis functions
   for (int i = 0; i < n; ++i)
   {
     result += c[i] * B(x, k, i, t);
@@ -92,32 +100,34 @@ double TMOMikamo14::bspline(double x, const std::vector<double> &t, const std::v
 
 std::pair<std::vector<double>, std::vector<double>> TMOMikamo14::generateBSplineParams(const std::vector<double> &x, const std::vector<double> &y, int k)
 {
+  // ensure x and y vectors are of the same size and not empty
   if (x.size() != y.size() || x.empty())
   {
     std::cerr << "ERROR: x and y vectors must have the same size and cannot be empty." << std::endl;
     exit(1);
   }
 
-  int n = x.size();
-  int m = n + k + 1; // number of knots
+  int n = x.size();  // number of data points
+  int m = n + k + 1; // total number of knots
 
-  // Generate knot vector t
-  std::vector<double> t(m);
+  std::vector<double> t(m); // knot vector
+  // set the first k+1 knots to the first x value
   for (int i = 0; i <= k; ++i)
   {
     t[i] = x.front();
   }
+  // set the internal knots based on the x values
   for (int i = k + 1; i < m - k - 1; ++i)
   {
-    t[i] = x[i - (k - 1)]; // Changed from x[i - k - 1]
+    t[i] = x[i - (k - 1)];
   }
+  // set the last k+1 knots to the last x value
   for (int i = m - k - 1; i < m; ++i)
   {
     t[i] = x.back();
   }
 
-  // Control points vector c is the same as y values
-  std::vector<double> c = y;
+  std::vector<double> c = y; // control points are the y values
 
   return {t, c};
 }
@@ -214,48 +224,37 @@ std::vector<double> TMOMikamo14::getDiscriminationParams(double I)
   return params;
 }
 
-cv::Mat TMOMikamo14::applyTwoStageModel(std::vector<double> spd, double I, std::vector<double> params)
+cv::Mat TMOMikamo14::applyTwoStageModel(std::vector<double> spd, double I, std::vector<cv::Mat> zVector, cv::Mat invM, cv::Mat lms2rgb)
 {
-  // initialize opponent color values
   double V = 0.0;
   double Org = 0.0;
   double Oyb = 0.0;
 
-  int k = 3; // degree of the B-spline
-  std::pair<std::vector<double>, std::vector<double>> LSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[0], k);
-  std::pair<std::vector<double>, std::vector<double>> MSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[1], k);
-  std::pair<std::vector<double>, std::vector<double>> SSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[2], k);
+  // compute the parameters for the B-spline basis functions
+  std::pair<std::vector<double>, std::vector<double>> spdBSplineParams = generateBSplineParams(indexes, spd, degree);
 
-  std::pair<std::vector<double>, std::vector<double>> spdBSplineParams = generateBSplineParams(indexes, spd, k);
-
+  int i = 0; // index for the zVector
   double step = 3.0;
   double gamma = lowerBound;
-  // go through the bins to get integrated opponent color values
+  // go through the spectral power distribution and compute the integrated opponent color values
   while (gamma < upperBound)
   {
-    // matrix with horizontally moved spectral sensitivities
-    cv::Mat CmClCs = (cv::Mat_<double>(3, 1) << bspline(gamma - params[0], LSensBSplineParams.first, LSensBSplineParams.second, k),
-                      bspline(gamma - params[1], MSensBSplineParams.first, MSensBSplineParams.second, k),
-                      bspline(gamma - params[2], SSensBSplineParams.first, SSensBSplineParams.second, k));
-
-    // matrix which adjusts the amplitudes of the cone responses
-    cv::Mat M = (cv::Mat_<double>(3, 3) << 0.6, 0.4, 0.0, params[3], params[4], params[5], params[6], params[7], params[8]);
     // get spectral opponent color values
-    cv::Mat z = M * CmClCs;
-    // add the spectral opponent color values to the integrated opponent color values
-    V += bspline(gamma, spdBSplineParams.first, spdBSplineParams.second, k) * z.at<double>(0, 0) * step;
-    Org += bspline(gamma, spdBSplineParams.first, spdBSplineParams.second, k) * z.at<double>(1, 0) * step;
-    Oyb += bspline(gamma, spdBSplineParams.first, spdBSplineParams.second, k) * z.at<double>(2, 0) * step;
+    cv::Mat z = zVector.at(i);
+    // add the opponent color values to the integrated values
+    V += bspline(gamma, spdBSplineParams.first, spdBSplineParams.second, degree) * z.at<double>(0, 0) * step;
+    Org += bspline(gamma, spdBSplineParams.first, spdBSplineParams.second, degree) * z.at<double>(1, 0) * step;
+    Oyb += bspline(gamma, spdBSplineParams.first, spdBSplineParams.second, degree) * z.at<double>(2, 0) * step;
 
+    i++;
     gamma += step;
   }
   // create matrix with opponent color values
   cv::Mat opponentColor = (cv::Mat_<double>(3, 1) << V, Org, Oyb);
-  // adjust the gap in the viewing conditions
-  std::vector<double> adaptParams = getDiscriminationParams(150.0);
-  cv::Mat invM = (cv::Mat_<double>(3, 3) << 0.6, 0.4, 0.0, adaptParams[3], adaptParams[4], adaptParams[5], adaptParams[6], adaptParams[7], adaptParams[8]);
-  invM = invM.inv();
+  // convert from opponent color space to LMS color space
   opponentColor = invM * opponentColor;
+  // convert from LMS color space to RGB color space
+  opponentColor = lms2rgb * opponentColor;
 
   return opponentColor;
 }
@@ -341,20 +340,50 @@ int TMOMikamo14::Transform()
   double I = getAdaptedRetinalIlluminance();
   std::vector<double> params = getDiscriminationParams(I);
   cv::Mat lms2rgb = getLms2RgbMat();
+  // matrix which adjusts the amplitudes of the cone responses
+  cv::Mat M = (cv::Mat_<double>(3, 3) << 0.6, 0.4, 0.0, params[3], params[4], params[5], params[6], params[7], params[8]);
+  // matrix which adjust the gap in the viewing conditions and also converts from opponent color space back to LMS
+  std::vector<double> adaptParams = getDiscriminationParams(150.0); // presuming viewers are in photopic conditions (150 Td)
+  cv::Mat invM = (cv::Mat_<double>(3, 3) << 0.6, 0.4, 0.0, adaptParams[3], adaptParams[4], adaptParams[5], adaptParams[6], adaptParams[7], adaptParams[8]);
+  invM = invM.inv();
 
+  // compute vector of matrixes of horizontally moved spectral sensitivities
+
+  // compute parameters for B-spline basis functions
+  std::pair<std::vector<double>, std::vector<double>> LSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[0], degree);
+  std::pair<std::vector<double>, std::vector<double>> MSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[1], degree);
+  std::pair<std::vector<double>, std::vector<double>> SSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[2], degree);
+
+  std::vector<cv::Mat> zVector;
+
+  double gamma = lowerBound;
+  double step = 3.0;
+
+  while (gamma < upperBound)
+  {
+    // matrix with horizontally moved spectral sensitivities
+    cv::Mat CmClCs = (cv::Mat_<double>(3, 1) << bspline(gamma - params[0], LSensBSplineParams.first, LSensBSplineParams.second, degree),
+                      bspline(gamma - params[1], MSensBSplineParams.first, MSensBSplineParams.second, degree),
+                      bspline(gamma - params[2], SSensBSplineParams.first, SSensBSplineParams.second, degree));
+    cv::Mat z = M * CmClCs;
+    zVector.push_back(z);
+
+    gamma += step;
+  }
+
+  // go through the image and apply the two-stage model
   for (int y = 0; y < pSrc->GetHeight(); y++)
   {
     for (int x = 0; x < pSrc->GetWidth(); x++)
     {
       double *srcPixel = pSrc->GetPixel(x, y);
       std::vector<double> spd = RGBtoSpectrum(srcPixel[0], srcPixel[1], srcPixel[2]);
-      cv::Mat opponentColor = applyTwoStageModel(spd, I, params);
-      opponentColor = lms2rgb * opponentColor;
+      cv::Mat RGB = applyTwoStageModel(spd, I, zVector, invM, lms2rgb);
 
       double *dstPixel = pDst->GetPixel(x, y);
-      dstPixel[0] = opponentColor.at<double>(0, 0);
-      dstPixel[1] = opponentColor.at<double>(1, 0);
-      dstPixel[2] = opponentColor.at<double>(2, 0);
+      dstPixel[0] = RGB.at<double>(0, 0);
+      dstPixel[1] = RGB.at<double>(1, 0);
+      dstPixel[2] = RGB.at<double>(2, 0);
     }
   }
 
