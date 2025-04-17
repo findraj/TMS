@@ -381,9 +381,9 @@ int TMOMikamo14::Transform()
       cv::Mat RGB = applyTwoStageModel(spd, I, zVector, invM, lms2rgb);
 
       double *dstPixel = pDst->GetPixel(x, y);
-      dstPixel[0] = RGB.at<double>(0, 0);
-      dstPixel[1] = RGB.at<double>(1, 0);
-      dstPixel[2] = RGB.at<double>(2, 0);
+      dstPixel[0] = std::max(RGB.at<double>(0, 0), 0.0);
+      dstPixel[1] = std::max(RGB.at<double>(1, 0), 0.0);
+      dstPixel[2] = std::max(RGB.at<double>(2, 0), 0.0);
     }
   }
 

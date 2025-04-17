@@ -83,6 +83,7 @@ public:
    * @param I adapted retinal illuminance
    * @param zVector vector of spectral opponent color values
    * @param invM matrix to adjust the amplitudes of the cone responses
+   * @param lms2rgb matrix to convert from LMS to RGB
    * @return Mat: 3 opponent color values
    */
   cv::Mat applyTwoStageModel(std::vector<double> spd, double I, std::vector<cv::Mat> zVector, cv::Mat invM, cv::Mat lms2rgb);
