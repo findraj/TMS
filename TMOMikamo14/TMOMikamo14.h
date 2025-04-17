@@ -81,12 +81,13 @@ public:
    * @brief Function to apply two-stage model to get opponent color values
    * @param spd spectral power distribution
    * @param I adapted retinal illuminance
+   * @param qn original image LMS values
    * @param zVector vector of spectral opponent color values
    * @param invM matrix to adjust the amplitudes of the cone responses
    * @param lms2rgb matrix to convert from LMS to RGB
    * @return Mat: 3 opponent color values
    */
-  cv::Mat applyTwoStageModel(std::vector<double> spd, double I, std::vector<cv::Mat> zVector, cv::Mat invM, cv::Mat lms2rgb);
+  cv::Mat applyTwoStageModel(std::vector<double> spd, double I, std::vector<cv::Mat> qn, std::vector<cv::Mat> zVector, cv::Mat invM, cv::Mat lms2rgb);
 
   /**
    * @brief Function to convert RGB values to spectral power distribution
@@ -151,12 +152,6 @@ public:
       {2.40836E-03, 3.20278E-02, 8.69665E-02, 2.88959E-01, 8.07299E-01, 9.97484E-01, 8.33982E-01, 3.51497E-01, 6.19706E-02, 5.89749E-03},
       {2.26991E-03, 4.74049E-02, 1.55249E-01, 4.27764E-01, 9.58589E-01, 8.54663E-01, 3.34429E-01, 4.98952E-02, 4.41197E-03, 3.65317E-04},
       {5.66498E-02, 8.70713E-01, 7.13240E-01, 1.22839E-01, 9.42821E-03, 3.86967E-04, 1.83459E-05, 0.0, 0.0, 0.0}};
-
-  // std::vector<std::vector<double>> displaySpectrum = {
-  //     {0.0, 0.05, 0.05, 0.05, 0.05, 0.05, 0.5, 2.5, 0.05, 1.5}, // red
-  //     {0.00, 0.05, 0.2, 0.5, 1.0, 1.0, 0.35, 0.1, 0.05, 0.0},   // green
-  //     {0.1, 1.3, 1.4, 0.50, 0.40, 0.1, 0.05, 0.00, 0.00, 0.00}  // blue
-  // };
 
   std::vector<std::vector<double>> displaySpectrum = {
       {0.0, 0.025, 0.09, 0.09, 0.05, 0.045, 0.345, 3.955, 0.045, 0.205},

@@ -224,11 +224,14 @@ std::vector<double> TMOMikamo14::getDiscriminationParams(double I)
   return params;
 }
 
-cv::Mat TMOMikamo14::applyTwoStageModel(std::vector<double> spd, double I, std::vector<cv::Mat> zVector, cv::Mat invM, cv::Mat lms2rgb)
+cv::Mat TMOMikamo14::applyTwoStageModel(std::vector<double> spd, double I, std::vector<cv::Mat> qn, std::vector<cv::Mat> zVector, cv::Mat invM, cv::Mat lms2rgb)
 {
   double V = 0.0;
   double Org = 0.0;
   double Oyb = 0.0;
+  double L = 0.0;
+  double M = 0.0;
+  double S = 0.0;
 
   // compute the parameters for the B-spline basis functions
   std::pair<std::vector<double>, std::vector<double>> spdBSplineParams = generateBSplineParams(indexes, spd, degree);
@@ -241,22 +244,30 @@ cv::Mat TMOMikamo14::applyTwoStageModel(std::vector<double> spd, double I, std::
   {
     // get spectral opponent color values
     cv::Mat z = zVector.at(i);
+    double spd = bspline(gamma, spdBSplineParams.first, spdBSplineParams.second, degree);
     // add the opponent color values to the integrated values
-    V += bspline(gamma, spdBSplineParams.first, spdBSplineParams.second, degree) * z.at<double>(0, 0) * step;
-    Org += bspline(gamma, spdBSplineParams.first, spdBSplineParams.second, degree) * z.at<double>(1, 0) * step;
-    Oyb += bspline(gamma, spdBSplineParams.first, spdBSplineParams.second, degree) * z.at<double>(2, 0) * step;
+    V += spd * z.at<double>(0, 0) * step;
+    Org += spd * z.at<double>(1, 0) * step;
+    Oyb += spd * z.at<double>(2, 0) * step;
+    L += spd * qn.at(i).at<double>(0, 0) * step;
+    M += spd * qn.at(i).at<double>(1, 0) * step;
+    S += spd * qn.at(i).at<double>(2, 0) * step;
 
     i++;
     gamma += step;
   }
+  // create matrix with original LMS values
+  cv::Mat Qn = (cv::Mat_<double>(3, 1) << L, M, S);
   // create matrix with opponent color values
   cv::Mat opponentColor = (cv::Mat_<double>(3, 1) << V, Org, Oyb);
   // convert from opponent color space to LMS color space
   opponentColor = invM * opponentColor;
+  // add LMS shift values to the LMS original values
+  Qn = Qn + opponentColor;
   // convert from LMS color space to RGB color space
-  opponentColor = lms2rgb * opponentColor;
+  Qn = lms2rgb * Qn;
 
-  return opponentColor;
+  return Qn;
 }
 
 std::vector<double> TMOMikamo14::RGBtoSpectrum(double red, double green, double blue)
@@ -354,6 +365,7 @@ int TMOMikamo14::Transform()
   std::pair<std::vector<double>, std::vector<double>> MSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[1], degree);
   std::pair<std::vector<double>, std::vector<double>> SSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[2], degree);
 
+  std::vector<cv::Mat> qn;
   std::vector<cv::Mat> zVector;
 
   double gamma = lowerBound;
@@ -361,6 +373,12 @@ int TMOMikamo14::Transform()
 
   while (gamma < upperBound)
   {
+    // matrix with original spectral sensitivities
+    cv::Mat qnTmp = (cv::Mat_<double>(3, 1) << bspline(gamma, LSensBSplineParams.first, LSensBSplineParams.second, degree),
+                     bspline(gamma, MSensBSplineParams.first, MSensBSplineParams.second, degree),
+                     bspline(gamma, SSensBSplineParams.first, SSensBSplineParams.second, degree));
+    qn.push_back(qnTmp);
+
     // matrix with horizontally moved spectral sensitivities
     cv::Mat CmClCs = (cv::Mat_<double>(3, 1) << bspline(gamma - params[0], LSensBSplineParams.first, LSensBSplineParams.second, degree),
                       bspline(gamma - params[1], MSensBSplineParams.first, MSensBSplineParams.second, degree),
@@ -378,7 +396,7 @@ int TMOMikamo14::Transform()
     {
       double *srcPixel = pSrc->GetPixel(x, y);
       std::vector<double> spd = RGBtoSpectrum(srcPixel[0], srcPixel[1], srcPixel[2]);
-      cv::Mat RGB = applyTwoStageModel(spd, I, zVector, invM, lms2rgb);
+      cv::Mat RGB = applyTwoStageModel(spd, I, qn, zVector, invM, lms2rgb);
 
       double *dstPixel = pDst->GetPixel(x, y);
       dstPixel[0] = std::max(RGB.at<double>(0, 0), 0.0);
