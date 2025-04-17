@@ -122,6 +122,38 @@ std::pair<std::vector<double>, std::vector<double>> TMOMikamo14::generateBSpline
   return {t, c};
 }
 
+cv::Mat TMOMikamo14::getLms2RgbMat()
+{
+  cv::Mat lms2rgb(3, 3, CV_64F);
+
+  // go through L-, M- and S-cone sensitivities and R, G, B display spectrum output
+  for (int x = 0; x < 3; x++) // LMS
+  {
+    for (int y = 0; y < 3; y++) // RGB
+    {
+      std::pair<std::vector<double>, std::vector<double>> params1 = generateBSplineParams(indexes, LMSsensitivities[x], 3);
+      std::pair<std::vector<double>, std::vector<double>> params2 = generateBSplineParams(indexes, displaySpectrum[y], 3);
+
+      // perform integration using the B-spline basis functions
+      double step = 3.0;
+      double gamma = lowerBound;
+      double sum = 0.0;
+
+      while (gamma < upperBound)
+      {
+        double lms = bspline(gamma, params1.first, params1.second, 3);
+        double rgb = bspline(gamma, params2.first, params2.second, 3);
+        sum += lms * rgb * step;
+        gamma += step;
+      }
+      lms2rgb.at<double>(x, y) = sum;
+    }
+  }
+
+  // inverse the matrix to get RGB to LMS matrix
+  return lms2rgb.inv();
+}
+
 double TMOMikamo14::getAdaptedRetinalIlluminance()
 {
   // if adapted retinal illuminance is set, return it
@@ -196,7 +228,7 @@ cv::Mat TMOMikamo14::applyTwoStageModel(std::vector<double> spd, double I, std::
 
   std::pair<std::vector<double>, std::vector<double>> spdBSplineParams = generateBSplineParams(indexes, spd, k);
 
-  double step = 10.0;
+  double step = 3.0;
   double gamma = lowerBound;
   // go through the bins to get integrated opponent color values
   while (gamma < upperBound)
@@ -308,6 +340,7 @@ int TMOMikamo14::Transform()
 {
   double I = getAdaptedRetinalIlluminance();
   std::vector<double> params = getDiscriminationParams(I);
+  cv::Mat lms2rgb = getLms2RgbMat();
 
   for (int y = 0; y < pSrc->GetHeight(); y++)
   {
@@ -316,6 +349,7 @@ int TMOMikamo14::Transform()
       double *srcPixel = pSrc->GetPixel(x, y);
       std::vector<double> spd = RGBtoSpectrum(srcPixel[0], srcPixel[1], srcPixel[2]);
       cv::Mat opponentColor = applyTwoStageModel(spd, I, params);
+      opponentColor = lms2rgb * opponentColor;
 
       double *dstPixel = pDst->GetPixel(x, y);
       dstPixel[0] = opponentColor.at<double>(0, 0);
