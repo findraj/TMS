@@ -338,7 +338,7 @@ std::vector<double> TMOMikamo14::RGBtoSpectrum(double red, double green, double 
 double TMOMikamo14::luminanceReduction(double Y, double YLogAvg, double Ymax)
 {
   // get key value for luminance reduction
-  double alpha = 1.03 - 2 / (2 + std::log10(YLogAvg + 1));
+  double alpha = 1.03 - 2.0 / (2.0 + std::log10(YLogAvg + 1.0));
   // compute reduced luminance
   double Yr = (alpha * Y) / YLogAvg;
   // compute final, normalized luminance
@@ -411,15 +411,15 @@ int TMOMikamo14::Transform()
   // luminance reduction
   double epsilon = 1e-6;
   double sumLogY = 0.0;
-  int pixelCount = pSrc->GetHeight() * pSrc->GetWidth();
+  int pixelCount = pDst->GetHeight() * pDst->GetWidth();
   double Ymax = 0.0;
 
   // compute sum of logarithms of luminance and maximum luminance
-  for (int y = 0; y < pSrc->GetHeight(); y++)
+  for (int y = 0; y < pDst->GetHeight(); y++)
   {
-    for (int x = 0; x < pSrc->GetWidth(); x++)
+    for (int x = 0; x < pDst->GetWidth(); x++)
     {
-      double Y = pSrc->GetPixel(x, y)[0];
+      double Y = pDst->GetPixel(x, y)[0];
       sumLogY += std::log(Y + epsilon);
       if (Y > Ymax)
       {
@@ -436,7 +436,7 @@ int TMOMikamo14::Transform()
   {
     for (int x = 0; x < pDst->GetWidth(); x++)
     {
-      double Y = pSrc->GetPixel(x, y)[0];
+      double Y = pDst->GetPixel(x, y)[0];
       double Yr = luminanceReduction(Y, YLogAvg, Ymax);
       pDst->GetPixel(x, y)[0] = Yr;
     }
