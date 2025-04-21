@@ -342,7 +342,7 @@ double TMOMikamo14::luminanceReduction(double Y, double YLogAvg, double Ymax)
   // compute reduced luminance
   double Yr = (alpha * Y) / YLogAvg;
   // compute final, normalized luminance
-  double Yn = (Yr * (1 + (Yr / std::pow(Ymax, 2)))) / (1 + Yr);
+  double Yn = Yr / (1 + Yr);
   return Yn;
 }
 
@@ -405,21 +405,26 @@ int TMOMikamo14::Transform()
     }
   }
 
-  pDst->Convert(TMO_Yxy);
-  pSrc->Convert(TMO_Yxy);
-
   // luminance reduction
   double epsilon = 1e-6;
   double sumLogY = 0.0;
   int pixelCount = pDst->GetHeight() * pDst->GetWidth();
   double Ymax = 0.0;
+  double rangeReduction;
+  if (I > 10.0)
+    rangeReduction = 1.0;
+  else if (I > 1.0)
+    rangeReduction = 0.5;
+  else
+    rangeReduction = 0.25;
 
   // compute sum of logarithms of luminance and maximum luminance
   for (int y = 0; y < pDst->GetHeight(); y++)
   {
     for (int x = 0; x < pDst->GetWidth(); x++)
     {
-      double Y = pDst->GetPixel(x, y)[0];
+      double *pixel = pDst->GetPixel(x, y);
+      double Y = pixel[0] * 0.2126 + pixel[1] * 0.7152 + pixel[2] * 0.0722;
       sumLogY += std::log(Y + epsilon);
       if (Y > Ymax)
       {
@@ -431,18 +436,29 @@ int TMOMikamo14::Transform()
   // compute average luminance
   double YLogAvg = std::exp(sumLogY / pixelCount);
 
+  cv::Mat adaptedLuminance = cv::Mat::zeros(pDst->GetWidth(), pDst->GetHeight(), CV_64F);
+
   // go through the image and apply luminance reduction
   for (int y = 0; y < pDst->GetHeight(); y++)
   {
     for (int x = 0; x < pDst->GetWidth(); x++)
     {
-      double Y = pDst->GetPixel(x, y)[0];
+      double *pixel = pDst->GetPixel(x, y);
+      double Y = pixel[0] * 0.2126 + pixel[1] * 0.7152 + pixel[2] * 0.0722;
       double Yr = luminanceReduction(Y, YLogAvg, Ymax);
-      pDst->GetPixel(x, y)[0] = Yr;
+      adaptedLuminance.at<double>(x, y) = Yr;
     }
   }
 
-  pDst->Convert(TMO_RGB);
+  pDst->Convert(TMO_Yxy);
+
+  for (int y = 0; y < pDst->GetHeight(); y++)
+  {
+    for (int x = 0; x < pDst->GetWidth(); x++)
+    {
+      pDst->GetPixel(x, y)[0] = adaptedLuminance.at<double>(x, y) * rangeReduction;
+    }
+  }
 
   return 0;
 }
