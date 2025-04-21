@@ -40,12 +40,12 @@ TMOMikamo14::TMOMikamo14()
   al.SetRange(0.0, 1000.0);
   this->Register(al);
 
-  nob.SetName(L"nob");
-  nob.SetDescription(L"Number of bins to be used in wavelength discrimination. Higher number, more accurate.");
-  nob.SetDefault(120);
-  nob = 120;
-  nob.SetRange(10, 200);
-  this->Register(nob);
+  step.SetName(L"step");
+  step.SetDescription(L"Step size for integration; <3.0, 30.0>. Lower step size means more accurate result, but slower computation.");
+  step.SetDefault(3.0);
+  step = 3.0;
+  step.SetRange(3.0, 30.0);
+  this->Register(step);
 }
 
 TMOMikamo14::~TMOMikamo14() {}
@@ -145,7 +145,6 @@ cv::Mat TMOMikamo14::getLms2RgbMat()
       std::pair<std::vector<double>, std::vector<double>> params2 = generateBSplineParams(indexes, displaySpectrum[y], 3);
 
       // perform integration using the B-spline basis functions
-      double step = 3.0;
       double gamma = lowerBound;
       double sum = 0.0;
 
@@ -237,7 +236,6 @@ cv::Mat TMOMikamo14::applyTwoStageModel(std::vector<double> spd, double I, std::
   std::pair<std::vector<double>, std::vector<double>> spdBSplineParams = generateBSplineParams(indexes, spd, degree);
 
   int i = 0; // index for the zVector
-  double step = 3.0;
   double gamma = lowerBound;
   // go through the spectral power distribution and compute the integrated opponent color values
   while (gamma < upperBound)
@@ -369,7 +367,6 @@ int TMOMikamo14::Transform()
   std::vector<cv::Mat> zVector;
 
   double gamma = lowerBound;
-  double step = 3.0;
 
   while (gamma < upperBound)
   {

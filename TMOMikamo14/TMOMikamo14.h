@@ -153,14 +153,15 @@ public:
       {2.26991E-03, 4.74049E-02, 1.55249E-01, 4.27764E-01, 9.58589E-01, 8.54663E-01, 3.34429E-01, 4.98952E-02, 4.41197E-03, 3.65317E-04},
       {5.66498E-02, 8.70713E-01, 7.13240E-01, 1.22839E-01, 9.42821E-03, 3.86967E-04, 1.83459E-05, 0.0, 0.0, 0.0}};
 
+  // data measured by Wandell Lab - Stanford https://cs.haifa.ac.il/hagit/courses/ist/Lectures/Tutorials/color/phosphors.mat
   std::vector<std::vector<double>> displaySpectrum = {
       {0.0, 0.025, 0.09, 0.09, 0.05, 0.045, 0.345, 3.955, 0.045, 0.205},
       {-0.0, 0.015, 0.115, 0.77, 1.42, 0.685, 0.215, 0.09, 0.0, -0.0},
       {0.175, 1.1, 1.09, 0.28, 0.075, 0.02, 0.005, 0.025, -0.005, -0.005}};
 
 protected:
-  TMODouble lm;  // luminance multiplier
-  TMODouble ari; // adapted retinal illuminance
-  TMODouble al;  // average luminance
-  TMOInt nob;    // number of bins
+  TMODouble lm;   // luminance multiplier
+  TMODouble ari;  // adapted retinal illuminance
+  TMODouble al;   // average luminance
+  TMODouble step; // number of bins
 };
