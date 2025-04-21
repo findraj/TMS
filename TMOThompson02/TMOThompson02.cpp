@@ -176,7 +176,7 @@ int TMOThompson02::Transform()
 		for (int x = 0; x < pDst->GetWidth(); x++)
 		{
 			double Y = pSrc->GetPixel(x, y)[0];
-			double Yr = luminanceReduction(Y, YLogAvg, Ymax);
+			double Yr = luminanceReduction(Y * 0.7, YLogAvg, Ymax);
 			pDst->GetPixel(x, y)[0] = Yr;
 			// copy chromaticity values
 			pDst->GetPixel(x, y)[1] = pSrc->GetPixel(x, y)[1];
