@@ -60,7 +60,7 @@ public:
    * @brief Function to get the LMS to RGB matrix
    * @return cv::Mat: LMS to RGB matrix
    */
-  cv::Mat getLms2RgbMat();
+  cv::Mat getLms2RgbMat(std::vector<double> shift);
 
   /**
    * @brief Function to get adapted retinal illuminance, from ari or al or

@@ -132,7 +132,7 @@ std::pair<std::vector<double>, std::vector<double>> TMOMikamo14::generateBSpline
   return {t, c};
 }
 
-cv::Mat TMOMikamo14::getLms2RgbMat()
+cv::Mat TMOMikamo14::getLms2RgbMat(std::vector<double> shift)
 {
   cv::Mat lms2rgb(3, 3, CV_64F);
 
@@ -150,7 +150,7 @@ cv::Mat TMOMikamo14::getLms2RgbMat()
 
       while (gamma < upperBound)
       {
-        double lms = bspline(gamma, params1.first, params1.second, 3);
+        double lms = bspline(gamma - shift[x], params1.first, params1.second, 3);
         double rgb = bspline(gamma, params2.first, params2.second, 3);
         sum += lms * rgb * step;
         gamma += step;
@@ -261,7 +261,7 @@ cv::Mat TMOMikamo14::applyTwoStageModel(std::vector<double> spd, double I, std::
   // convert from opponent color space to LMS color space
   opponentColor = invM * opponentColor;
   // add LMS shift values to the LMS original values
-  Qn = Qn + opponentColor;
+  Qn = opponentColor;
   // convert from LMS color space to RGB color space
   Qn = lms2rgb * Qn;
 
@@ -348,11 +348,11 @@ int TMOMikamo14::Transform()
 {
   double I = getAdaptedRetinalIlluminance();
   std::vector<double> params = getDiscriminationParams(I);
-  cv::Mat lms2rgb = getLms2RgbMat();
   // matrix which adjusts the amplitudes of the cone responses
   cv::Mat M = (cv::Mat_<double>(3, 3) << 0.6, 0.4, 0.0, params[3], params[4], params[5], params[6], params[7], params[8]);
   // matrix which adjust the gap in the viewing conditions and also converts from opponent color space back to LMS
   std::vector<double> adaptParams = getDiscriminationParams(150.0); // presuming viewers are in photopic conditions (150 Td)
+  cv::Mat lms2rgb = getLms2RgbMat({params[0], params[1], params[2]});
   cv::Mat invM = (cv::Mat_<double>(3, 3) << 0.6, 0.4, 0.0, adaptParams[3], adaptParams[4], adaptParams[5], adaptParams[6], adaptParams[7], adaptParams[8]);
   invM = invM.inv();
 
@@ -402,26 +402,21 @@ int TMOMikamo14::Transform()
     }
   }
 
+  pSrc->Convert(TMO_Yxy);
+  pDst->Convert(TMO_Yxy);
+
   // luminance reduction
   double epsilon = 1e-6;
   double sumLogY = 0.0;
   int pixelCount = pDst->GetHeight() * pDst->GetWidth();
   double Ymax = 0.0;
-  double rangeReduction;
-  if (I > 10.0)
-    rangeReduction = 1.0;
-  else if (I > 1.0)
-    rangeReduction = 0.5;
-  else
-    rangeReduction = 0.25;
 
   // compute sum of logarithms of luminance and maximum luminance
   for (int y = 0; y < pDst->GetHeight(); y++)
   {
     for (int x = 0; x < pDst->GetWidth(); x++)
     {
-      double *pixel = pDst->GetPixel(x, y);
-      double Y = pixel[0] * 0.2126 + pixel[1] * 0.7152 + pixel[2] * 0.0722;
+      double Y = pDst->GetPixel(x, y)[0];
       sumLogY += std::log(Y + epsilon);
       if (Y > Ymax)
       {
@@ -433,29 +428,18 @@ int TMOMikamo14::Transform()
   // compute average luminance
   double YLogAvg = std::exp(sumLogY / pixelCount);
 
-  cv::Mat adaptedLuminance = cv::Mat::zeros(pDst->GetWidth(), pDst->GetHeight(), CV_64F);
-
   // go through the image and apply luminance reduction
   for (int y = 0; y < pDst->GetHeight(); y++)
   {
     for (int x = 0; x < pDst->GetWidth(); x++)
     {
-      double *pixel = pDst->GetPixel(x, y);
-      double Y = pixel[0] * 0.2126 + pixel[1] * 0.7152 + pixel[2] * 0.0722;
+      double Y = pDst->GetPixel(x, y)[0];
       double Yr = luminanceReduction(Y, YLogAvg, Ymax);
-      adaptedLuminance.at<double>(x, y) = Yr;
+      pDst->GetPixel(x, y)[0] = Yr;
     }
   }
 
-  pDst->Convert(TMO_Yxy);
-
-  for (int y = 0; y < pDst->GetHeight(); y++)
-  {
-    for (int x = 0; x < pDst->GetWidth(); x++)
-    {
-      pDst->GetPixel(x, y)[0] = adaptedLuminance.at<double>(x, y) * rangeReduction;
-    }
-  }
+  pDst->Convert(TMO_RGB);
 
   return 0;
 }
