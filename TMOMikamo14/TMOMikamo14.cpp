@@ -28,8 +28,8 @@ TMOMikamo14::TMOMikamo14()
 
   ari.SetName(L"ari");
   ari.SetDescription(L"Adapted retinal illuminance (ari) in Trolands; <0.0, 1000.0> (optional)");
-  ari.SetDefault(10.0);
-  ari = 10.0;
+  ari.SetDefault(0.85);
+  ari = 0.85;
   ari.SetRange(0.0, 1000.0);
   this->Register(ari);
 
