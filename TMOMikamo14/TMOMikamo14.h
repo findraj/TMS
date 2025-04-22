@@ -155,9 +155,9 @@ public:
 
   // data measured by Wandell Lab - Stanford https://cs.haifa.ac.il/hagit/courses/ist/Lectures/Tutorials/color/phosphors.mat
   std::vector<std::vector<double>> displaySpectrum = {
-      {0.0, 0.025, 0.09, 0.09, 0.05, 0.045, 0.345, 3.955, 0.045, 0.205},
-      {-0.0, 0.015, 0.115, 0.77, 1.42, 0.685, 0.215, 0.09, 0.0, -0.0},
-      {0.175, 1.1, 1.09, 0.28, 0.075, 0.02, 0.005, 0.025, -0.005, -0.005}};
+      {0.0, 0.025, 0.03, 0.09, 0.05, 0.075, 0.345, 3.955, 0.035, 0.205},
+      {0.0, 0.015, 0.06, 0.77, 1.42, 0.955, 0.215, 0.09, 0.005, 0.0},
+      {0.175, 1.1, 1.405, 0.28, 0.075, 0.03, 0.005, 0.025, 0.005, 0.005}};
 
 protected:
   TMODouble lm;   // luminance multiplier
