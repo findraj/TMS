@@ -60,7 +60,7 @@ public:
    * @brief Function to get the LMS to RGB matrix
    * @return cv::Mat: LMS to RGB matrix
    */
-  cv::Mat getLms2RgbMat(std::vector<double> shift);
+  cv::Mat getLms2RgbMat();
 
   /**
    * @brief Function to get adapted retinal illuminance, from ari or al or
@@ -103,10 +103,9 @@ public:
    * maximum luminance
    * @param Y luminance
    * @param YLogAvg average luminance
-   * @param Ymax maximum luminance
    * @return double: reduced luminance
    */
-  double luminanceReduction(double Y, double YLogAvg, double Ymax);
+  double luminanceReduction(double Y, double YLogAvg);
 
   /**
    * @brief Function to apply the tone mapping operator
@@ -160,7 +159,6 @@ public:
       {0.175, 1.1, 1.405, 0.28, 0.075, 0.03, 0.005, 0.025, 0.005, 0.005}};
 
 protected:
-  TMODouble lm;   // luminance multiplier
   TMODouble ari;  // adapted retinal illuminance
   TMODouble al;   // average luminance
   TMODouble step; // number of bins

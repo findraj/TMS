@@ -19,17 +19,10 @@ TMOMikamo14::TMOMikamo14()
   SetName(L"Mikamo14");
   SetDescription(L"A tone reproduction operator for all luminance ranges considering human color perception. Two optional parameters, if both set, just ari is used.");
 
-  lm.SetName(L"lm");
-  lm.SetDescription(L"Luminance multiplier (lm); <0.0, 1000.0> (mandatory when using adapted luminance)");
-  lm.SetDefault(0.0);
-  lm = 0.0;
-  lm.SetRange(0.0, 1000.0);
-  this->Register(lm);
-
   ari.SetName(L"ari");
   ari.SetDescription(L"Adapted retinal illuminance (ari) in Trolands; <0.0, 1000.0> (optional)");
-  ari.SetDefault(0.85);
-  ari = 0.85;
+  ari.SetDefault(8.5);
+  ari = 8.5;
   ari.SetRange(0.0, 1000.0);
   this->Register(ari);
 
@@ -132,7 +125,7 @@ std::pair<std::vector<double>, std::vector<double>> TMOMikamo14::generateBSpline
   return {t, c};
 }
 
-cv::Mat TMOMikamo14::getLms2RgbMat(std::vector<double> shift)
+cv::Mat TMOMikamo14::getLms2RgbMat()
 {
   cv::Mat lms2rgb(3, 3, CV_64F);
 
@@ -150,7 +143,7 @@ cv::Mat TMOMikamo14::getLms2RgbMat(std::vector<double> shift)
 
       while (gamma < upperBound)
       {
-        double lms = bspline(gamma - shift[x], params1.first, params1.second, 3);
+        double lms = bspline(gamma, params1.first, params1.second, 3);
         double rgb = bspline(gamma, params2.first, params2.second, 3);
         sum += lms * rgb * step;
         gamma += step;
@@ -165,12 +158,6 @@ cv::Mat TMOMikamo14::getLms2RgbMat(std::vector<double> shift)
 
 double TMOMikamo14::getAdaptedRetinalIlluminance()
 {
-  // if adapted retinal illuminance is set, return it
-  if (ari != 0.0 && (al == 0.0 && lm == 0.0))
-  {
-    return ari;
-  }
-
   // if adapted luminance is set, return it multiplied by the pupil area
   if (al != 0.0)
   {
@@ -179,29 +166,8 @@ double TMOMikamo14::getAdaptedRetinalIlluminance()
     return al * area;
   }
 
-  // compute average luminance from the input image
-  double luminanceSum = 0.0;
-  for (int y = 0; y < pSrc->GetHeight(); y++)
-  {
-    for (int x = 0; x < pSrc->GetWidth(); x++)
-    {
-      double L = pSrc->GetLuminance(x, y);
-      luminanceSum += L;
-    }
-  }
-  double averageLuminance = luminanceSum / (pSrc->GetHeight() * pSrc->GetWidth());
-
-  if (lm == 0.0)
-  {
-    std::cerr << "ERROR: Luminance multiplier is not set." << std::endl;
-    exit(1);
-  }
-
-  averageLuminance *= lm;
-
-  double diameter = 5.697 - 0.658 * std::log10(averageLuminance) + 0.07 * std::pow(std::log10(averageLuminance), 2); // pupil diameter depending on the average luminance, equation by Blackie and Howland (1999)
-  double area = M_PI * std::pow(diameter / 2, 2);                                                                    // area of the pupil
-  return averageLuminance * area;
+  // else return the adapted retinal illuminance set by the user or default value
+  return ari;
 }
 
 std::vector<double> TMOMikamo14::getDiscriminationParams(double I)
@@ -260,8 +226,13 @@ cv::Mat TMOMikamo14::applyTwoStageModel(std::vector<double> spd, double I, std::
   cv::Mat opponentColor = (cv::Mat_<double>(3, 1) << V, Org, Oyb);
   // convert from opponent color space to LMS color space
   opponentColor = invM * opponentColor;
-  // add LMS shift values to the LMS original values
-  Qn = opponentColor;
+  double rangeReduction = 1.0;
+  if (I < 50.0) // mesopic and scotopic vision
+  {
+    rangeReduction = 0.01;
+  }
+  // add LMS shift values to the original LMS values
+  Qn = (Qn + opponentColor) * rangeReduction;
   // convert from LMS color space to RGB color space
   Qn = lms2rgb * Qn;
 
@@ -333,7 +304,7 @@ std::vector<double> TMOMikamo14::RGBtoSpectrum(double red, double green, double 
   return spectrum;
 }
 
-double TMOMikamo14::luminanceReduction(double Y, double YLogAvg, double Ymax)
+double TMOMikamo14::luminanceReduction(double Y, double YLogAvg)
 {
   // get key value for luminance reduction
   double alpha = 1.03 - 2.0 / (2.0 + std::log10(YLogAvg + 1.0));
@@ -352,31 +323,34 @@ int TMOMikamo14::Transform()
   cv::Mat M = (cv::Mat_<double>(3, 3) << 0.6, 0.4, 0.0, params[3], params[4], params[5], params[6], params[7], params[8]);
   // matrix which adjust the gap in the viewing conditions and also converts from opponent color space back to LMS
   std::vector<double> adaptParams = getDiscriminationParams(150.0); // presuming viewers are in photopic conditions (150 Td)
-  cv::Mat lms2rgb = getLms2RgbMat({params[0], params[1], params[2]});
   cv::Mat invM = (cv::Mat_<double>(3, 3) << 0.6, 0.4, 0.0, adaptParams[3], adaptParams[4], adaptParams[5], adaptParams[6], adaptParams[7], adaptParams[8]);
   invM = invM.inv();
+  // compute matrix for conversion from LMS to RGB
+  cv::Mat lms2rgb = getLms2RgbMat();
 
-  // compute vector of matrixes of horizontally moved spectral sensitivities
+  // pre-compute the opponent color and original cone spectral sensitivities to be used in the two-stage model
+  // this operation saves a lot of time, because the two-stage model is applied to each pixel in the image
 
   // compute parameters for B-spline basis functions
   std::pair<std::vector<double>, std::vector<double>> LSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[0], degree);
   std::pair<std::vector<double>, std::vector<double>> MSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[1], degree);
   std::pair<std::vector<double>, std::vector<double>> SSensBSplineParams = generateBSplineParams(indexes, LMSsensitivities[2], degree);
-
+  // vector containing the original cone spectral sensitivities
   std::vector<cv::Mat> qn;
+  // vector containing the horizontally and vertically moved opponent color spectral sensitivities
   std::vector<cv::Mat> zVector;
 
   double gamma = lowerBound;
 
   while (gamma < upperBound)
   {
-    // matrix with original spectral sensitivities
+    // matrix with original cone spectral sensitivities
     cv::Mat qnTmp = (cv::Mat_<double>(3, 1) << bspline(gamma, LSensBSplineParams.first, LSensBSplineParams.second, degree),
                      bspline(gamma, MSensBSplineParams.first, MSensBSplineParams.second, degree),
                      bspline(gamma, SSensBSplineParams.first, SSensBSplineParams.second, degree));
     qn.push_back(qnTmp);
 
-    // matrix with horizontally moved spectral sensitivities
+    // matrix with horizontally and vertically moved opponent color spectral sensitivities
     cv::Mat CmClCs = (cv::Mat_<double>(3, 1) << bspline(gamma - params[0], LSensBSplineParams.first, LSensBSplineParams.second, degree),
                       bspline(gamma - params[1], MSensBSplineParams.first, MSensBSplineParams.second, degree),
                       bspline(gamma - params[2], SSensBSplineParams.first, SSensBSplineParams.second, degree));
@@ -409,19 +383,14 @@ int TMOMikamo14::Transform()
   double epsilon = 1e-6;
   double sumLogY = 0.0;
   int pixelCount = pDst->GetHeight() * pDst->GetWidth();
-  double Ymax = 0.0;
 
-  // compute sum of logarithms of luminance and maximum luminance
+  // compute sum of logarithms of luminance
   for (int y = 0; y < pDst->GetHeight(); y++)
   {
     for (int x = 0; x < pDst->GetWidth(); x++)
     {
       double Y = pDst->GetPixel(x, y)[0];
       sumLogY += std::log(Y + epsilon);
-      if (Y > Ymax)
-      {
-        Ymax = Y;
-      }
     }
   }
 
@@ -434,7 +403,7 @@ int TMOMikamo14::Transform()
     for (int x = 0; x < pDst->GetWidth(); x++)
     {
       double Y = pDst->GetPixel(x, y)[0];
-      double Yr = luminanceReduction(Y, YLogAvg, Ymax);
+      double Yr = luminanceReduction(Y, YLogAvg);
       pDst->GetPixel(x, y)[0] = Yr;
     }
   }
