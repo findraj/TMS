@@ -49,7 +49,7 @@ double TMOThompson02::luminanceReduction(double Y, double YLogAvg, double Ymax)
 	// compute reduced luminance
 	double Yr = (alpha * Y) / YLogAvg;
 	// compute final, normalized luminance
-	double Yn = (Yr * (1 + (Yr / std::pow(Ymax, 2)))) / (1 + Yr);
+	double Yn = Yr / (1 + Yr);
 	return Yn;
 }
 
